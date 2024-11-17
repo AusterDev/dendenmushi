@@ -3,13 +3,11 @@ package handlers
 import (
 	"github.com/bwmarrin/discordgo"
 	"log"
-	"sync"
 )
 
 type CommandHandler struct {
 	commands map[string]SlashCmd
 	s        *discordgo.Session
-	mu       sync.Mutex
 }
 
 func NewCmdHandler(s *discordgo.Session) *CommandHandler {
@@ -20,30 +18,28 @@ func NewCmdHandler(s *discordgo.Session) *CommandHandler {
 }
 
 func (h *CommandHandler) Add(cmds []SlashCmd, sync bool) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
 	for _, cmd := range cmds {
 		m := cmd.GetMeta()
+
+		if m == nil {
+			log.Println("GetMeta retured nil for command")
+			continue
+		}
 		h.commands[m.Name] = cmd
 
 		log.Printf("Command %s has been loaded", m.Name)
 
-		if !sync {
-			return
-		}
-		if _, err := h.s.ApplicationCommandCreate(h.s.State.User.ID, "", m); err != nil {
-			log.Printf("Failed to create %s command: %v", m.Name, err)
-		} else {
-			log.Printf("Command %s has been created on discord", m.Name)
+		if sync {
+			if _, err := h.s.ApplicationCommandCreate(h.s.State.User.ID, "", m); err != nil {
+				log.Printf("Failed to create %s command: %v", m.Name, err)
+			} else {
+				log.Printf("Command %s has been created on discord", m.Name)
+			}
 		}
 	}
 }
 
 func (h *CommandHandler) Get(name string) SlashCmd {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
 	return h.commands[name]
 }
 
@@ -68,7 +64,7 @@ type Ctx struct {
 
 type ComplexMessage struct {
 	Content string
-	Data    discordgo.InteractionResponseData
+	Data    *discordgo.InteractionResponseData
 	Defer   bool
 }
 
@@ -96,7 +92,7 @@ func (ctx *Ctx) ReplyComplex(msg ComplexMessage) error {
 
 	err := ctx.Session.InteractionRespond(ctx.Interaction, &discordgo.InteractionResponse{
 		Type: msgType,
-		Data: &msg.Data,
+		Data: msg.Data,
 	})
 	return err
 }
